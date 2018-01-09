@@ -314,7 +314,7 @@ class Tf_train_ctc(object):
 
             # self.total_loss = ctc_ops.ctc_loss(self.targets, self.logits, self.seq_length,ctc_merge_repeated=False)
             self.total_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.targets, logits=tf.transpose(self.logits,[1,0,2]))
-            self.avg_loss = tf.reduce_sum(self.total_loss)
+            self.avg_loss = tf.reduce_sum(self.total_loss)/self.batch_size
             self.loss_summary = tf.summary.scalar("avg_loss", self.avg_loss)
 
             self.cost_placeholder = tf.placeholder(dtype=tf.float32, shape=[])
@@ -349,7 +349,7 @@ class Tf_train_ctc(object):
             # # Compute the label error rate (accuracy)
             t_logits = tf.transpose(self.logits,[1,0,2])
             self.ler = tf.not_equal(tf.argmax(t_logits,2,output_type=tf.int32),self.targets, name='label_error_rate')
-            self.ler = tf.reduce_sum(tf.cast(self.ler,tf.int32))/5000
+            self.ler = tf.reduce_sum(tf.cast(self.ler,tf.int32))/self.batch_size
             self.ler_placeholder = tf.placeholder(dtype=tf.float32, shape=[])
             self.train_ler_op = tf.summary.scalar(
                 "train_label_error_rate", self.ler_placeholder)
@@ -368,7 +368,7 @@ class Tf_train_ctc(object):
                 self.validation_and_checkpoint_check(epoch)
 
             epoch_start = time.time()
-
+            # calculate network output
             self.train_cost, self.train_ler = self.run_batches(
                 self.data_sets.train,
                 is_training=True,
@@ -387,7 +387,7 @@ class Tf_train_ctc(object):
                 self.train_cost,
                 self.train_ler,
                 epoch_duration))
-
+            # put loss to summary
             summary_line = self.sess.run(
                 self.train_ler_op, {self.ler_placeholder: self.train_ler})
             self.writer.add_summary(summary_line, epoch)
@@ -496,11 +496,12 @@ class Tf_train_ctc(object):
                 # running these pushes tensors (data) through graph
                 batch_cost, _ = self.sess.run(
                     [self.avg_loss, self.optimizer], feed)
+                #  average_cost * 5000
                 self.train_cost += batch_cost * dataset._batch_size
                 logger.debug('Batch cost: %.2f | Train cost: %.2f',
                              batch_cost, self.train_cost)
             # print(self.sess.run(self.logits))
-
+            # actually, here is not label error rate, it is the number of errors. It will be divided by total numbers of samples after whole batch process
             self.train_ler += self.sess.run(self.ler, feed_dict=feed) * dataset._batch_size
             logger.debug('Label error rate: %.2f', self.train_ler)
 
